@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(npx *)",
+      "Bash(nest *)",
+      "Bash(git *)",
+      "Bash(cat *)",
+      "Bash(ls *)",
+      "Bash(mkdir *)",
+      "Bash(rm *)",
+      "Bash(cp *)",
+      "Bash(mv *)",
+      "Bash(find *)",
+      "Bash(grep *)",
+      "Bash(node *)",
+      "Bash(ts-node *)",
+      "Bash(tsc *)",
+      "Bash(echo *)",
+      "Bash(curl *)",
+      "Bash(pwd)",
+      "Bash(which *)"
+    ],
+    "deny": []
+  }
+}

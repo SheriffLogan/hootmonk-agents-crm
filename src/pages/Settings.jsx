@@ -17,11 +17,12 @@ function formatRelativeTime(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-function AccountRow({ account, onSync, onDisconnect, onLabelSave }) {
+function AccountRow({ account, onSync, onResync, onDisconnect, onLabelSave }) {
   const [editing,       setEditing]       = useState(false);
   const [label,         setLabel]         = useState(account.label ?? '');
   const [saving,        setSaving]        = useState(false);
   const [syncing,       setSyncing]       = useState(false);
+  const [resyncing,     setResyncing]     = useState(false);
   const [confirming,    setConfirming]    = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
 
@@ -40,6 +41,12 @@ function AccountRow({ account, onSync, onDisconnect, onLabelSave }) {
   const handleSync = async () => {
     setSyncing(true);
     try { await onSync(account.id); } finally { setSyncing(false); }
+  };
+
+  const handleResync = async () => {
+    if (!window.confirm('This will delete all imported transactions from this account and re-import them with improved parsing. Continue?')) return;
+    setResyncing(true);
+    try { await onResync(account.id); } finally { setResyncing(false); }
   };
 
   const handleDisconnect = async () => {
@@ -99,22 +106,30 @@ function AccountRow({ account, onSync, onDisconnect, onLabelSave }) {
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={handleSync}
-            disabled={syncing || disconnecting}
+            disabled={syncing || resyncing || disconnecting}
             className="btn-outline btn-sm"
           >
             {syncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
             Sync
           </button>
           <button
+            onClick={handleResync}
+            disabled={syncing || resyncing || disconnecting}
+            className="inline-flex items-center gap-1 btn-sm border border-amber-300 text-amber-700 hover:bg-amber-50 rounded-lg px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50"
+          >
+            {resyncing ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            Re-sync
+          </button>
+          <button
             onClick={() => setEditing(true)}
-            disabled={syncing || disconnecting}
+            disabled={syncing || resyncing || disconnecting}
             className="btn-outline btn-sm"
           >
             <Pencil size={13} />
           </button>
           <button
             onClick={() => setConfirming(true)}
-            disabled={syncing || disconnecting}
+            disabled={syncing || resyncing || disconnecting}
             className="inline-flex items-center gap-1 btn-sm border border-red-200 text-red-600 hover:bg-red-50 rounded-lg px-2 py-1 text-xs font-medium transition-colors"
           >
             <Trash2 size={13} />
@@ -184,6 +199,16 @@ export default function Settings() {
     }
   };
 
+  const handleResync = async (id) => {
+    try {
+      const result = await financialApi.resyncGmailAccount(id);
+      toast.success(`Re-synced ${result.imported ?? 0} transactions`);
+      fetchAccounts();
+    } catch {
+      toast.error('Re-sync failed. Please try again.');
+    }
+  };
+
   const handleDisconnect = async (id) => {
     try {
       await financialApi.disconnectGmailAccount(id);
@@ -247,6 +272,7 @@ export default function Settings() {
                   key={account.id}
                   account={account}
                   onSync={handleSync}
+                  onResync={handleResync}
                   onDisconnect={handleDisconnect}
                   onLabelSave={handleLabelSave}
                 />

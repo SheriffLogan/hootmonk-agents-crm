@@ -39,6 +39,7 @@ export const financialApi = {
   getGmailAccounts:    ()        => api.get(FA.GMAIL_ACCOUNTS).then((r) => r.data),
   disconnectGmailAccount: (id)   => api.delete(FA.GMAIL_ACCOUNT(id)).then((r) => r.data),
   syncGmailAccount:    (id)      => api.post(FA.GMAIL_ACCOUNT_SYNC(id)).then((r) => r.data),
+  resyncGmailAccount:  (id)      => api.post(FA.GMAIL_ACCOUNT_RESYNC(id)).then((r) => r.data),
   updateGmailAccount:  (id,body) => api.patch(FA.GMAIL_ACCOUNT(id), body).then((r) => r.data),
   getCombinedOverview: ()        => api.get(FA.OVERVIEW_COMBINED).then((r) => r.data),
   getOverviewByBank:   ()        => api.get(FA.OVERVIEW_BY_BANK).then((r) => r.data),

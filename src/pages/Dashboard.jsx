@@ -1,9 +1,11 @@
+import { useState, useEffect } from 'react';
 import { useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { selectUser, selectAgents, selectIsAdmin } from '../redux/auth/authSlice';
 import { AGENT_CONFIGS } from '../config/agents';
-import { TrendingUp, ArrowRight, Bot, Sparkles } from 'lucide-react';
+import { ArrowRight, Bot, Sparkles, Mail, Settings } from 'lucide-react';
 import * as Icons from 'lucide-react';
+import { financialApi } from '../modules/financial-advisor/api/financialApi';
 
 function AgentCard({ config, onClick }) {
   const Icon = Icons[config.icon] ?? Icons.Bot;
@@ -27,16 +29,43 @@ function AgentCard({ config, onClick }) {
   );
 }
 
+function SetupPromptCard({ onNavigate }) {
+  return (
+    <div className="card p-5 mb-6 border-primary-200 bg-gradient-to-r from-primary-50/50 to-blue-50/50">
+      <div className="flex gap-4 items-start">
+        <div className="w-10 h-10 rounded-xl bg-primary-100 flex items-center justify-center flex-shrink-0">
+          <Mail size={18} className="text-primary-600" />
+        </div>
+        <div className="flex-1">
+          <h3 className="text-sm font-semibold text-slate-800 mb-1">Complete your setup</h3>
+          <p className="text-xs text-slate-600 leading-relaxed mb-3">
+            Connect your Gmail accounts to automatically track transactions from all your banks — no manual entry needed.
+          </p>
+          <button onClick={onNavigate} className="btn-primary btn-sm">
+            <Settings size={13} /> Go to Settings
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const navigate  = useNavigate();
   const user      = useSelector(selectUser);
   const agents    = useSelector(selectAgents);
   const isAdmin   = useSelector(selectIsAdmin);
+  const [showSetup, setShowSetup] = useState(false);
 
-  // Which agents are accessible
   const accessibleAgents = Object.values(AGENT_CONFIGS).filter(
     (cfg) => isAdmin || agents.includes(cfg.id),
   );
+
+  useEffect(() => {
+    financialApi.getGmailAccounts()
+      .then((data) => setShowSetup(Array.isArray(data) && data.length === 0))
+      .catch(() => setShowSetup(false));
+  }, []);
 
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -52,6 +81,9 @@ export default function Dashboard() {
           Here's an overview of your active agents and services.
         </p>
       </div>
+
+      {/* Setup prompt — only when no Gmail accounts */}
+      {showSetup && <SetupPromptCard onNavigate={() => navigate('/settings')} />}
 
       {/* Active agents */}
       {accessibleAgents.length > 0 ? (
@@ -82,17 +114,19 @@ export default function Dashboard() {
       )}
 
       {/* Quick tips */}
-      <div className="mt-8 p-4 rounded-xl bg-gradient-to-r from-primary-600/5 to-primary-400/5 border border-primary-100">
-        <div className="flex gap-3">
-          <Sparkles size={16} className="text-primary-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-semibold text-slate-800 mb-1">Pro tip</p>
-            <p className="text-xs text-slate-600">
-              Connect your Gmail account in the Financial Advisor to automatically track all your bank transactions — no manual entry needed.
-            </p>
+      {!showSetup && (
+        <div className="mt-8 p-4 rounded-xl bg-gradient-to-r from-primary-600/5 to-primary-400/5 border border-primary-100">
+          <div className="flex gap-3">
+            <Sparkles size={16} className="text-primary-500 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-semibold text-slate-800 mb-1">Pro tip</p>
+              <p className="text-xs text-slate-600">
+                Connect your Gmail account in the Financial Advisor to automatically track all your bank transactions — no manual entry needed.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

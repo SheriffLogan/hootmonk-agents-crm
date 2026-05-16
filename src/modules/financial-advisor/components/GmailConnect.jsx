@@ -1,16 +1,17 @@
 /**
- * GmailConnect — one-time Gmail OAuth connection banner.
- * Shows when gmail is not connected. Disappears once connected.
+ * GmailConnect — Gmail OAuth connection banner.
+ * Shows connect prompt when disconnected; sync + disconnect controls when connected.
  */
 import { useState, useEffect } from 'react';
-import { Mail, CheckCircle, RefreshCw, Loader2, X } from 'lucide-react';
+import { Mail, CheckCircle, RefreshCw, Loader2, X, Unlink } from 'lucide-react';
 import { financialApi } from '../api/financialApi';
 import toast from 'react-hot-toast';
 
 export default function GmailConnect({ onConnected }) {
-  const [status,   setStatus]   = useState(null); // null | 'connected' | 'disconnected'
-  const [syncing,  setSyncing]  = useState(false);
-  const [dismissed,setDismissed]= useState(false);
+  const [status,       setStatus]       = useState(null); // null | 'connected' | 'disconnected'
+  const [syncing,      setSyncing]      = useState(false);
+  const [disconnecting,setDisconnecting]= useState(false);
+  const [dismissed,    setDismissed]    = useState(false);
 
   useEffect(() => {
     financialApi.getGmailStatus()
@@ -43,6 +44,19 @@ export default function GmailConnect({ onConnected }) {
     }
   };
 
+  const handleDisconnect = async () => {
+    setDisconnecting(true);
+    try {
+      await financialApi.disconnectGmail();
+      setStatus('disconnected');
+      toast.success('Gmail disconnected successfully.');
+    } catch (_) {
+      toast.error('Failed to disconnect Gmail. Please try again.');
+    } finally {
+      setDisconnecting(false);
+    }
+  };
+
   const handleSync = async () => {
     setSyncing(true);
     try {
@@ -65,14 +79,24 @@ export default function GmailConnect({ onConnected }) {
           <CheckCircle size={16} className="text-emerald-600 flex-shrink-0" />
           <p className="text-sm text-emerald-700 font-medium">Gmail connected — transactions sync automatically</p>
         </div>
-        <button
-          onClick={handleSync}
-          disabled={syncing}
-          className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold hover:underline disabled:opacity-50"
-        >
-          {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-          Sync now
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleSync}
+            disabled={syncing || disconnecting}
+            className="flex items-center gap-1.5 text-xs text-emerald-700 font-semibold hover:underline disabled:opacity-50"
+          >
+            {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+            Sync now
+          </button>
+          <button
+            onClick={handleDisconnect}
+            disabled={syncing || disconnecting}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-red-600 disabled:opacity-50 transition-colors"
+          >
+            {disconnecting ? <Loader2 size={12} className="animate-spin" /> : <Unlink size={12} />}
+            Disconnect
+          </button>
+        </div>
       </div>
     );
   }

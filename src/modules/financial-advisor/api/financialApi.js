@@ -34,6 +34,7 @@ export const financialApi = {
   // Gmail integration
   getGmailStatus:   ()        => api.get(FA.GMAIL_STATUS).then((r) => r.data),
   connectGmail:     ()        => api.get(FA.GMAIL_CONNECT).then((r) => r.data),
+  disconnectGmail:  ()        => api.delete(FA.GMAIL_DISCONNECT).then((r) => r.data),
   syncGmail:        ()        => api.post(FA.GMAIL_SYNC).then((r) => r.data),
 
   // PDF upload

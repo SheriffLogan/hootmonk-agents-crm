@@ -58,6 +58,7 @@ export const financialApi = {
   settleLedgerEntry:   (id)        => api.post(FA.LEDGER_SETTLE(id)).then((r) => r.data),
   writeOffLedgerEntry: (id)        => api.post(FA.LEDGER_WRITE_OFF(id)).then((r) => r.data),
   getLedgerSummary:    ()          => api.get(FA.LEDGER_SUMMARY).then((r) => r.data),
+  getLedgerHistory:    (id)        => api.get(FA.LEDGER_HISTORY(id)).then((r) => r.data),
 
   // Allocations
   getAllocations:       (params)    => api.get(FA.ALLOCATIONS, { params }).then((r) => r.data),

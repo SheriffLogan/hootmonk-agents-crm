@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   HandCoins, ArrowUpRight, ArrowDownLeft, Wallet,
   Plane, PiggyBank, TrendingUp, CircleDot,
-  Plus, X, Pencil, Trash2, Loader2, Calendar,
+  Plus, X, Pencil, Trash2, Loader2, Calendar, Clock,
 } from 'lucide-react';
 import { PageHeader, MetricCard } from '../../components/common';
 import { financialApi } from './api/financialApi';
@@ -37,7 +37,8 @@ const ALLOC_STATUS = {
 // ─── Shared primitives ────────────────────────────────────────────────────────
 
 function StatusBadge({ status, map }) {
-  const s = map[status] ?? map[Object.keys(map)[0]];
+  const key = status != null && status in map ? status : (status ?? '').toLowerCase();
+  const s = map[key] ?? map[Object.keys(map)[0]];
   return (
     <span className={clsx('inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full', s.bg, s.text)}>
       {'dot' in s && <span className={clsx('w-1.5 h-1.5 rounded-full inline-block', s.dot)} />}
@@ -64,95 +65,163 @@ function ModalShell({ title, onClose, children }) {
 // ─── Ledger card ──────────────────────────────────────────────────────────────
 
 function LedgerCard({ entry, onEdit, onPayment, onAddMore, onSettle, onWriteOff, onDelete }) {
-  const isLent  = entry.direction === 'LENT';
-  const settled = entry.settledAmount ?? 0;
-  const pct     = entry.amount > 0 ? Math.min(100, Math.round((settled / entry.amount) * 100)) : 0;
-  const canAct  = entry.status === 'pending' || entry.status === 'partial';
+  const isLent      = entry.direction === 'LENT';
+  const settled     = entry.settledAmount ?? 0;
+  const pct         = entry.amount > 0 ? Math.min(100, Math.round((settled / entry.amount) * 100)) : 0;
+  const statusLower = (entry.status ?? '').toLowerCase();
+  const canAct      = statusLower !== 'settled' && statusLower !== 'written_off';
+
+  const [showHistory, setShowHistory] = useState(false);
+  const [history,     setHistory]     = useState(null);
+  const [histLoading, setHistLoading] = useState(false);
+
+  const toggleHistory = async () => {
+    if (!showHistory && history === null) {
+      setHistLoading(true);
+      try {
+        const data = await financialApi.getLedgerHistory(entry.id);
+        setHistory(Array.isArray(data) ? data : (data?.data ?? []));
+      } catch {
+        toast.error('Failed to load history');
+        setHistory([]);
+      } finally {
+        setHistLoading(false);
+      }
+    }
+    setShowHistory((v) => !v);
+  };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className={clsx('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
-            isLent ? 'bg-red-50' : 'bg-emerald-50',
-          )}>
-            {isLent
-              ? <ArrowUpRight size={16} className="text-red-500" />
-              : <ArrowDownLeft size={16} className="text-emerald-500" />
-            }
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="p-4 space-y-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className={clsx('w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
+              isLent ? 'bg-red-50' : 'bg-emerald-50',
+            )}>
+              {isLent
+                ? <ArrowUpRight size={16} className="text-red-500" />
+                : <ArrowDownLeft size={16} className="text-emerald-500" />
+              }
+            </div>
+            <div className="min-w-0">
+              <p className="font-bold text-slate-900 text-sm truncate">{entry.contactName}</p>
+              {entry.contactPhone && <p className="text-xs text-slate-400">{entry.contactPhone}</p>}
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="font-bold text-slate-900 text-sm truncate">{entry.contactName}</p>
-            {entry.contactPhone && <p className="text-xs text-slate-400">{entry.contactPhone}</p>}
+          <div className="text-right flex-shrink-0">
+            <p className={clsx('text-lg font-bold',
+              isLent && statusLower !== 'settled' ? 'text-red-600' : 'text-emerald-600',
+            )}>
+              {INR.format(entry.amount)}
+            </p>
+            <p className="text-xs text-slate-400">{isLent ? 'Lent' : 'Borrowed'}</p>
           </div>
         </div>
-        <div className="text-right flex-shrink-0">
-          <p className={clsx('text-lg font-bold',
-            isLent && entry.status !== 'settled' ? 'text-red-600' : 'text-emerald-600',
-          )}>
-            {INR.format(entry.amount)}
-          </p>
-          <p className="text-xs text-slate-400">{isLent ? 'Lent' : 'Borrowed'}</p>
-        </div>
-      </div>
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <StatusBadge status={entry.status} map={LEDGER_STATUS} />
-        {entry.dueDate && (
-          <span className="text-xs text-slate-500 flex items-center gap-1">
-            <Calendar size={11} /> Due {dayjs(entry.dueDate).format('DD MMM YYYY')}
-          </span>
+        <div className="flex items-center gap-2 flex-wrap">
+          <StatusBadge status={statusLower} map={LEDGER_STATUS} />
+          {entry.dueDate && (
+            <span className="text-xs text-slate-500 flex items-center gap-1">
+              <Calendar size={11} /> Due {dayjs(entry.dueDate).format('DD MMM YYYY')}
+            </span>
+          )}
+        </div>
+
+        {settled > 0 && (
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs text-slate-500">
+              <span>{isLent ? 'Received' : 'Repaid'}: {INR.format(settled)}</span>
+              <span>{pct}% of {INR.format(entry.amount)}</span>
+            </div>
+            <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
+            </div>
+          </div>
         )}
+
+        {entry.notes && <p className="text-xs text-slate-500 italic">{entry.notes}</p>}
+
+        <div className="flex items-center gap-1.5 flex-wrap pt-1">
+          {/* Always visible — even on settled entries */}
+          <button
+            onClick={() => onAddMore(entry)}
+            className="text-xs font-medium px-2.5 py-1 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+          >
+            {isLent ? 'Lend More' : 'Borrow More'}
+          </button>
+          {canAct && (
+            <>
+              <button
+                onClick={() => onPayment(entry)}
+                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
+              >
+                {isLent ? 'Received Back' : 'Paid Back'}
+              </button>
+              <button
+                onClick={() => onSettle(entry.id)}
+                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+              >
+                Settle
+              </button>
+              <button
+                onClick={() => onWriteOff(entry.id)}
+                className="text-xs font-medium px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
+              >
+                Write Off
+              </button>
+            </>
+          )}
+          <div className="ml-auto flex gap-1">
+            <button
+              onClick={toggleHistory}
+              title="View history"
+              className={clsx('btn-ghost p-1.5 rounded-lg transition-colors', showHistory ? 'text-primary-600' : '')}
+            >
+              <Clock size={12} />
+            </button>
+            <button onClick={() => onEdit(entry)} className="btn-ghost p-1.5 rounded-lg"><Pencil size={12} /></button>
+            <button onClick={() => onDelete(entry.id)} className="btn-ghost p-1.5 rounded-lg text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
+          </div>
+        </div>
       </div>
 
-      {settled > 0 && (
-        <div className="space-y-1">
-          <div className="flex justify-between text-xs text-slate-500">
-            <span>{isLent ? 'Received' : 'Repaid'}: {INR.format(settled)}</span>
-            <span>{pct}% of {INR.format(entry.amount)}</span>
-          </div>
-          <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
-          </div>
+      {/* ── Inline history panel ── */}
+      {showHistory && (
+        <div className="border-t border-slate-100 bg-slate-50 px-4 py-3">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2">History</p>
+          {histLoading ? (
+            <div className="flex justify-center py-3">
+              <Loader2 size={14} className="animate-spin text-slate-400" />
+            </div>
+          ) : !history || history.length === 0 ? (
+            <p className="text-xs text-slate-400 text-center py-1">No history recorded yet</p>
+          ) : (
+            <div className="space-y-2">
+              {history.map((h, i) => (
+                <div key={i} className="flex items-start gap-2.5 text-xs">
+                  <span className={clsx('w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 inline-block',
+                    h.type === 'payment' ? 'bg-emerald-400' : 'bg-blue-400',
+                  )} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className={clsx('font-semibold',
+                        h.type === 'payment' ? 'text-emerald-600' : 'text-blue-600',
+                      )}>
+                        {h.type === 'payment' ? '↓ ' : '↑ '}{INR.format(h.amount)}
+                      </span>
+                      <span className="text-slate-400 flex-shrink-0">
+                        {dayjs(h.date ?? h.createdAt).format('DD MMM YYYY')}
+                      </span>
+                    </div>
+                    {h.note && <p className="text-slate-500 mt-0.5 truncate">{h.note}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
-
-      {entry.notes && <p className="text-xs text-slate-500 italic">{entry.notes}</p>}
-
-      <div className="flex items-center gap-1.5 flex-wrap pt-1">
-        {canAct && (
-          <>
-            <button
-              onClick={() => onPayment(entry)}
-              className="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
-            >
-              {isLent ? 'Received Back' : 'Paid Back'}
-            </button>
-            <button
-              onClick={() => onAddMore(entry)}
-              className="text-xs font-medium px-2.5 py-1 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
-            >
-              {isLent ? 'Lend More' : 'Borrow More'}
-            </button>
-            <button
-              onClick={() => onSettle(entry.id)}
-              className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
-            >
-              Settle
-            </button>
-            <button
-              onClick={() => onWriteOff(entry.id)}
-              className="text-xs font-medium px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
-            >
-              Write Off
-            </button>
-          </>
-        )}
-        <div className="ml-auto flex gap-1">
-          <button onClick={() => onEdit(entry)} className="btn-ghost p-1.5 rounded-lg"><Pencil size={12} /></button>
-          <button onClick={() => onDelete(entry.id)} className="btn-ghost p-1.5 rounded-lg text-red-400 hover:text-red-600"><Trash2 size={12} /></button>
-        </div>
-      </div>
     </div>
   );
 }
@@ -163,7 +232,7 @@ function AllocationCard({ alloc, onEdit, onTopUp, onMarkUsed, onCancel, onDelete
   const cat     = ALLOC_CATEGORIES[alloc.category] ?? ALLOC_CATEGORIES.SAVINGS;
   const { Icon } = cat;
   const pct     = alloc.targetAmount > 0 ? Math.min(100, Math.round((alloc.allocatedAmount / alloc.targetAmount) * 100)) : 0;
-  const isActive = (alloc.status ?? 'active') === 'active';
+  const isActive = (alloc.status ?? 'active').toLowerCase() === 'active';
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
@@ -802,7 +871,7 @@ export default function FALedger() {
   const filteredLedger = ledgerEntries.filter((e) => {
     if (ledgerFilter === 'lent')     return e.direction === 'LENT';
     if (ledgerFilter === 'borrowed') return e.direction === 'BORROWED';
-    if (ledgerFilter === 'settled')  return e.status === 'settled';
+    if (ledgerFilter === 'settled')  return (e.status ?? '').toLowerCase() === 'settled';
     return true;
   });
 

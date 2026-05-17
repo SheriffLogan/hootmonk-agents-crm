@@ -38,6 +38,7 @@ export const ENDPOINTS = {
     LEDGER_SETTLE:       (id) => `/financial/ledger/${id}/settle`,
     LEDGER_WRITE_OFF:    (id) => `/financial/ledger/${id}/write-off`,
     LEDGER_SUMMARY:      '/financial/ledger/summary',
+    LEDGER_HISTORY:      (id) => `/financial/ledger/${id}/history`,
     ALLOCATIONS:         '/financial/allocations',
     ALLOCATION_ENTRY:    (id) => `/financial/allocations/${id}`,
     ALLOCATION_TOP_UP:   (id) => `/financial/allocations/${id}/top-up`,

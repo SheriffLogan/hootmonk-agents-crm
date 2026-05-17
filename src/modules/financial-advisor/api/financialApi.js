@@ -32,10 +32,17 @@ export const financialApi = {
   getInsights:      ()        => api.get(FA.INSIGHTS).then((r) => r.data),
 
   // Gmail integration
-  getGmailStatus:   ()        => api.get(FA.GMAIL_STATUS).then((r) => r.data),
-  connectGmail:     ()        => api.get(FA.GMAIL_CONNECT).then((r) => r.data),
-  disconnectGmail:  ()        => api.delete(FA.GMAIL_DISCONNECT).then((r) => r.data),
-  syncGmail:        ()        => api.post(FA.GMAIL_SYNC).then((r) => r.data),
+  getGmailStatus:      ()        => api.get(FA.GMAIL_STATUS).then((r) => r.data),
+  connectGmail:        ()        => api.get(FA.GMAIL_CONNECT).then((r) => r.data),
+  disconnectGmail:     ()        => api.delete(FA.GMAIL_DISCONNECT).then((r) => r.data),
+  syncGmail:           ()        => api.post(FA.GMAIL_SYNC).then((r) => r.data),
+  getGmailAccounts:    ()        => api.get(FA.GMAIL_ACCOUNTS).then((r) => r.data),
+  disconnectGmailAccount: (id)   => api.delete(FA.GMAIL_ACCOUNT(id)).then((r) => r.data),
+  syncGmailAccount:    (id)      => api.post(FA.GMAIL_ACCOUNT_SYNC(id)).then((r) => r.data),
+  resyncGmailAccount:  (id)      => api.post(FA.GMAIL_ACCOUNT_RESYNC(id)).then((r) => r.data),
+  updateGmailAccount:  (id,body) => api.patch(FA.GMAIL_ACCOUNT(id), body).then((r) => r.data),
+  getCombinedOverview: ()        => api.get(FA.OVERVIEW_COMBINED).then((r) => r.data),
+  getOverviewByBank:   ()        => api.get(FA.OVERVIEW_BY_BANK).then((r) => r.data),
 
   // PDF upload
   uploadStatement:  (formData) => api.post(FA.PDF_UPLOAD, formData, {

@@ -34,10 +34,31 @@ export const financialApi = {
   // Gmail integration
   getGmailStatus:   ()        => api.get(FA.GMAIL_STATUS).then((r) => r.data),
   connectGmail:     ()        => api.get(FA.GMAIL_CONNECT).then((r) => r.data),
+  disconnectGmail:  ()        => api.delete(FA.GMAIL_DISCONNECT).then((r) => r.data),
   syncGmail:        ()        => api.post(FA.GMAIL_SYNC).then((r) => r.data),
 
   // PDF upload
   uploadStatement:  (formData) => api.post(FA.PDF_UPLOAD, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }).then((r) => r.data),
+
+  // Ledger
+  getLedgerEntries:    (params)    => api.get(FA.LEDGER, { params }).then((r) => r.data),
+  createLedgerEntry:   (body)      => api.post(FA.LEDGER, body).then((r) => r.data),
+  updateLedgerEntry:   (id, body)  => api.patch(FA.LEDGER_ENTRY(id), body).then((r) => r.data),
+  deleteLedgerEntry:   (id)        => api.delete(FA.LEDGER_ENTRY(id)).then((r) => r.data),
+  recordLedgerPayment: (id, body)  => api.post(FA.LEDGER_PAYMENT(id), body).then((r) => r.data),
+  settleLedgerEntry:   (id)        => api.post(FA.LEDGER_SETTLE(id)).then((r) => r.data),
+  writeOffLedgerEntry: (id)        => api.post(FA.LEDGER_WRITE_OFF(id)).then((r) => r.data),
+  getLedgerSummary:    ()          => api.get(FA.LEDGER_SUMMARY).then((r) => r.data),
+
+  // Allocations
+  getAllocations:       (params)    => api.get(FA.ALLOCATIONS, { params }).then((r) => r.data),
+  createAllocation:    (body)      => api.post(FA.ALLOCATIONS, body).then((r) => r.data),
+  updateAllocation:    (id, body)  => api.patch(FA.ALLOCATION_ENTRY(id), body).then((r) => r.data),
+  deleteAllocation:    (id)        => api.delete(FA.ALLOCATION_ENTRY(id)).then((r) => r.data),
+  topUpAllocation:     (id, body)  => api.post(FA.ALLOCATION_TOP_UP(id), body).then((r) => r.data),
+  markAllocationUsed:  (id)        => api.post(FA.ALLOCATION_MARK_USED(id)).then((r) => r.data),
+  cancelAllocation:    (id)        => api.post(FA.ALLOCATION_CANCEL(id)).then((r) => r.data),
+  getAllocationsSummary:()          => api.get(FA.ALLOCATIONS_SUMMARY).then((r) => r.data),
 };

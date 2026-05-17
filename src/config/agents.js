@@ -24,6 +24,7 @@ export const AGENT_CONFIGS = {
       { key: 'fa-savings',      label: 'Savings Goals',    icon: 'PiggyBank',       path: '/financial-advisor/savings'   },
       { key: 'fa-investments',  label: 'Investments',      icon: 'BarChart3',       path: '/financial-advisor/investments'},
       { key: 'fa-reports',      label: 'Reports',          icon: 'FileText',        path: '/financial-advisor/reports'   },
+      { key: 'fa-ledger',       label: 'Ledger',           icon: 'HandCoins',       path: '/financial-advisor/ledger', description: 'Track lending, borrowing & fund allocations' },
     ],
   },
 };

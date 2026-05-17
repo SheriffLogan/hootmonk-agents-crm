@@ -63,8 +63,8 @@ function ModalShell({ title, onClose, children }) {
 
 // ─── Ledger card ──────────────────────────────────────────────────────────────
 
-function LedgerCard({ entry, onEdit, onPayment, onSettle, onWriteOff, onDelete }) {
-  const isLent  = entry.direction === 'lent';
+function LedgerCard({ entry, onEdit, onPayment, onAddMore, onSettle, onWriteOff, onDelete }) {
+  const isLent  = entry.direction === 'LENT';
   const settled = entry.settledAmount ?? 0;
   const pct     = entry.amount > 0 ? Math.min(100, Math.round((settled / entry.amount) * 100)) : 0;
   const canAct  = entry.status === 'pending' || entry.status === 'partial';
@@ -126,7 +126,13 @@ function LedgerCard({ entry, onEdit, onPayment, onSettle, onWriteOff, onDelete }
               onClick={() => onPayment(entry)}
               className="text-xs font-medium px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
             >
-              Record Payment
+              {isLent ? 'Received Back' : 'Paid Back'}
+            </button>
+            <button
+              onClick={() => onAddMore(entry)}
+              className="text-xs font-medium px-2.5 py-1 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100 transition-colors"
+            >
+              {isLent ? 'Lend More' : 'Borrow More'}
             </button>
             <button
               onClick={() => onSettle(entry.id)}
@@ -241,7 +247,7 @@ function LedgerModal({ entry, onClose, onSuccess }) {
     contactName:  entry?.contactName  ?? '',
     contactPhone: entry?.contactPhone ?? '',
     amount:       entry?.amount       ?? '',
-    direction:    entry?.direction    ?? 'lent',
+    direction:    entry?.direction    ?? 'LENT',
     dueDate:      entry?.dueDate?.split('T')[0] ?? '',
     notes:        entry?.notes        ?? '',
   });
@@ -254,7 +260,7 @@ function LedgerModal({ entry, onClose, onSuccess }) {
     if (!form.amount || Number(form.amount) <= 0) return toast.error('Enter a valid amount');
     setLoading(true);
     try {
-      const body = { ...form, amount: Number(form.amount) };
+      const body = { ...form, amount: Number(form.amount), dueDate: form.dueDate || null };
       if (isEdit) await financialApi.updateLedgerEntry(entry.id, body);
       else        await financialApi.createLedgerEntry(body);
       toast.success(isEdit ? 'Entry updated' : 'Entry added');
@@ -303,18 +309,18 @@ function LedgerModal({ entry, onClose, onSuccess }) {
           <div>
             <label className="label">Direction</label>
             <div className="flex rounded-lg border border-slate-200 overflow-hidden h-[38px]">
-              {['lent', 'borrowed'].map((d) => (
+              {[{ val: 'LENT', label: 'Lent' }, { val: 'BORROWED', label: 'Borrowed' }].map(({ val, label }) => (
                 <button
-                  key={d} type="button"
-                  onClick={() => set('direction', d)}
+                  key={val} type="button"
+                  onClick={() => set('direction', val)}
                   className={clsx(
                     'flex-1 text-xs font-medium transition-colors',
-                    form.direction === d
+                    form.direction === val
                       ? 'bg-primary-600 text-white'
                       : 'bg-white text-slate-600 hover:bg-slate-50',
                   )}
                 >
-                  {d === 'lent' ? 'Lent' : 'Borrowed'}
+                  {label}
                 </button>
               ))}
             </div>
@@ -354,7 +360,7 @@ function PaymentModal({ entry, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [amount, setAmount]   = useState('');
   const [note,   setNote]     = useState('');
-  const isLent    = entry.direction === 'lent';
+  const isLent    = entry.direction === 'LENT';
   const remaining = entry.amount - (entry.settledAmount ?? 0);
 
   const submit = async (e) => {
@@ -409,7 +415,63 @@ function PaymentModal({ entry, onClose, onSuccess }) {
           <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button type="submit" disabled={loading} className="btn-primary flex-1">
             {loading && <Loader2 size={14} className="animate-spin" />}
-            {loading ? 'Saving…' : 'Record Payment'}
+            {loading ? 'Saving…' : isLent ? 'Record Receipt' : 'Record Repayment'}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
+function AddMoreModal({ entry, onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [extra, setExtra]     = useState('');
+  const isLent = entry.direction === 'LENT';
+
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!extra || Number(extra) <= 0) return toast.error('Enter a valid amount');
+    setLoading(true);
+    try {
+      await financialApi.updateLedgerEntry(entry.id, { amount: entry.amount + Number(extra) });
+      toast.success(`${isLent ? 'Lent' : 'Borrowed'} amount updated`);
+      onSuccess();
+    } catch {
+      toast.error('Failed to update amount');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <ModalShell title={isLent ? 'Lend More' : 'Borrow More'} onClose={onClose}>
+      <div className="mb-4 p-3 bg-slate-50 rounded-lg text-sm space-y-0.5">
+        <p className="font-bold text-slate-900">{entry.contactName}</p>
+        <p className="text-slate-500">Current amount: {INR.format(entry.amount)}</p>
+      </div>
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <label className="label">Additional Amount (₹)</label>
+          <input
+            value={extra}
+            onChange={(e) => setExtra(e.target.value)}
+            type="number" min="1" step="1"
+            placeholder="e.g. 2000"
+            className="input"
+            autoFocus
+            required
+          />
+          {extra && Number(extra) > 0 && (
+            <p className="mt-1 text-xs text-slate-500">
+              New total: {INR.format(entry.amount + Number(extra))}
+            </p>
+          )}
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+          <button type="submit" disabled={loading} className="btn-primary flex-1">
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            {loading ? 'Saving…' : isLent ? 'Lend More' : 'Borrow More'}
           </button>
         </div>
       </form>
@@ -640,6 +702,7 @@ export default function FALedger() {
   const [showLedgerModal, setShowLedgerModal] = useState(false);
   const [editLedger,    setEditLedger]    = useState(null);
   const [paymentEntry,  setPaymentEntry]  = useState(null);
+  const [addMoreEntry,  setAddMoreEntry]  = useState(null);
 
   // Allocations state
   const [catFilter,    setCatFilter]    = useState('all');
@@ -737,8 +800,8 @@ export default function FALedger() {
 
   // Filtered data
   const filteredLedger = ledgerEntries.filter((e) => {
-    if (ledgerFilter === 'lent')     return e.direction === 'lent';
-    if (ledgerFilter === 'borrowed') return e.direction === 'borrowed';
+    if (ledgerFilter === 'lent')     return e.direction === 'LENT';
+    if (ledgerFilter === 'borrowed') return e.direction === 'BORROWED';
     if (ledgerFilter === 'settled')  return e.status === 'settled';
     return true;
   });
@@ -853,6 +916,7 @@ export default function FALedger() {
                   entry={entry}
                   onEdit={(e) => { setEditLedger(e); setShowLedgerModal(true); }}
                   onPayment={setPaymentEntry}
+                  onAddMore={setAddMoreEntry}
                   onSettle={handleSettle}
                   onWriteOff={handleWriteOff}
                   onDelete={handleDeleteLedger}
@@ -941,6 +1005,13 @@ export default function FALedger() {
           entry={paymentEntry}
           onClose={() => setPaymentEntry(null)}
           onSuccess={() => { setPaymentEntry(null); fetchLedger(); }}
+        />
+      )}
+      {addMoreEntry && (
+        <AddMoreModal
+          entry={addMoreEntry}
+          onClose={() => setAddMoreEntry(null)}
+          onSuccess={() => { setAddMoreEntry(null); fetchLedger(); }}
         />
       )}
       {showAllocModal && (

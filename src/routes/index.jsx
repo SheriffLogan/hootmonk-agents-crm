@@ -23,6 +23,7 @@ export const FASpendingPage     = lazy(() => import('../modules/financial-adviso
 export const FASavingsPage      = lazy(() => import('../modules/financial-advisor/Savings'));
 export const FAInvestmentsPage  = lazy(() => import('../modules/financial-advisor/Investments'));
 export const FAReportsPage      = lazy(() => import('../modules/financial-advisor/Reports'));
+export const FALedgerPage       = lazy(() => import('../modules/financial-advisor/Ledger'));
 
 // ─── Route definitions ───────────────────────────────────────────────────────
 export const authRoutes = [
@@ -49,4 +50,5 @@ export const agentRoutes = [
   { path: '/financial-advisor/savings',     element: FASavingsPage,     allowedAgents: [AGENTS.FINANCIAL_ADVISOR] },
   { path: '/financial-advisor/investments', element: FAInvestmentsPage, allowedAgents: [AGENTS.FINANCIAL_ADVISOR] },
   { path: '/financial-advisor/reports',     element: FAReportsPage,     allowedAgents: [AGENTS.FINANCIAL_ADVISOR] },
+  { path: '/financial-advisor/ledger',      element: FALedgerPage,      allowedAgents: [AGENTS.FINANCIAL_ADVISOR] },
 ];

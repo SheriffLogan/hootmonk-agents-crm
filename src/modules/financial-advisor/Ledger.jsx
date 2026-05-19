@@ -137,8 +137,8 @@ function LedgerCard({ entry, onEdit, onPayment, onAddMore, onSettle, onWriteOff,
         {settled > 0 && (
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-slate-500">
-              <span>{isLent ? 'Received' : 'Repaid'}: {INR.format(settled)}</span>
-              <span>{pct}% of {INR.format(amount)}</span>
+              <span>Remaining: {INR.format(amount - settled)}</span>
+              <span>{pct}% {isLent ? 'received' : 'repaid'}</span>
             </div>
             <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
               <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
@@ -360,8 +360,7 @@ function ConfirmModal({ title, message, confirmLabel, danger = false, onClose, o
                 : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50',
             )}
           >
-            {loading && <Loader2 size={14} className="animate-spin" />}
-            {loading ? 'Processing…' : confirmLabel}
+            {loading ? <><Loader2 size={14} className="animate-spin" /> Processing…</> : confirmLabel}
           </button>
         </div>
       </form>
@@ -478,8 +477,7 @@ function LedgerModal({ entry, onClose, onSuccess }) {
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button type="submit" disabled={loading} className="btn-primary flex-1">
-            {loading && <Loader2 size={14} className="animate-spin" />}
-            {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Entry'}
+            {loading ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : isEdit ? 'Save Changes' : 'Add Entry'}
           </button>
         </div>
       </form>
@@ -548,8 +546,7 @@ function PaymentModal({ entry, onClose, onSuccess }) {
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button type="submit" disabled={loading} className="btn-primary flex-1">
-            {loading && <Loader2 size={14} className="animate-spin" />}
-            {loading ? 'Saving…' : isLent ? 'Record Receipt' : 'Record Repayment'}
+            {loading ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : isLent ? 'Record Receipt' : 'Record Repayment'}
           </button>
         </div>
       </form>
@@ -618,8 +615,7 @@ function AddMoreModal({ entry, onClose, onSuccess }) {
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button type="submit" disabled={loading} className="btn-primary flex-1">
-            {loading && <Loader2 size={14} className="animate-spin" />}
-            {loading ? 'Saving…' : isLent ? 'Lend More' : 'Borrow More'}
+            {loading ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : isLent ? 'Lend More' : 'Borrow More'}
           </button>
         </div>
       </form>
@@ -746,8 +742,7 @@ function AllocationModal({ alloc, onClose, onSuccess }) {
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button type="submit" disabled={loading} className="btn-primary flex-1">
-            {loading && <Loader2 size={14} className="animate-spin" />}
-            {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Create'}
+            {loading ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : isEdit ? 'Save Changes' : 'Create'}
           </button>
         </div>
       </form>
@@ -810,8 +805,7 @@ function TopUpModal({ alloc, onClose, onSuccess }) {
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
           <button type="submit" disabled={loading} className="btn-primary flex-1">
-            {loading && <Loader2 size={14} className="animate-spin" />}
-            {loading ? 'Saving…' : 'Top Up'}
+            {loading ? <><Loader2 size={14} className="animate-spin" /> Saving…</> : 'Top Up'}
           </button>
         </div>
       </form>
@@ -857,6 +851,7 @@ export default function FALedger() {
   const [addMoreEntry,    setAddMoreEntry]    = useState(null);
   const [confirmSettle,   setConfirmSettle]   = useState(null); // full entry
   const [confirmWriteOff, setConfirmWriteOff] = useState(null); // full entry
+  const [showAllLedgerCards, setShowAllLedgerCards] = useState(false);
 
   // ── Allocations state ───────────────────────────────────────────────────────
   const [catFilter,      setCatFilter]      = useState('all');
@@ -865,13 +860,17 @@ export default function FALedger() {
   const [showAllocModal, setShowAllocModal] = useState(false);
   const [editAlloc,      setEditAlloc]      = useState(null);
   const [topUpAlloc,     setTopUpAlloc]     = useState(null);
+  const [showAllAllocCards, setShowAllAllocCards] = useState(false);
 
   // ── Computed summaries (no separate API calls) ──────────────────────────────
   const ledgerSummary = useMemo(() => {
-    const active = ledgerEntries.filter(e => (e.status ?? '').toLowerCase() !== 'written_off');
+    const active = ledgerEntries.filter(e => {
+      const st = (e.status ?? '').toLowerCase();
+      return st !== 'written_off' && st !== 'settled';
+    });
     return {
-      totalLent:     active.filter(e => e.direction === 'LENT').reduce((s, e) => s + Number(e.amount), 0),
-      totalBorrowed: active.filter(e => e.direction === 'BORROWED').reduce((s, e) => s + Number(e.amount), 0),
+      totalLent:     active.filter(e => e.direction === 'LENT').reduce((s, e) => s + (Number(e.amount) - Number(e.settledAmount ?? 0)), 0),
+      totalBorrowed: active.filter(e => e.direction === 'BORROWED').reduce((s, e) => s + (Number(e.amount) - Number(e.settledAmount ?? 0)), 0),
     };
   }, [ledgerEntries]);
 
@@ -1065,33 +1064,30 @@ export default function FALedger() {
       {/* ── Ledger tab ─────────────────────────────────────────────────────────── */}
       {activeTab === 'ledger' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <MetricCard
-              title="Total Lent Out"
-              value={INR.format(ledgerSummary.totalLent)}
-              icon={<ArrowUpRight size={18} />}
-              iconBg="bg-red-50"
-              iconColor="text-red-500"
-              loading={ledgerLoading}
-            />
-            <MetricCard
-              title="Total Borrowed"
-              value={INR.format(ledgerSummary.totalBorrowed)}
-              icon={<ArrowDownLeft size={18} />}
-              iconBg="bg-emerald-50"
-              iconColor="text-emerald-500"
-              loading={ledgerLoading}
-            />
-            <MetricCard
-              title="Net Owed to You"
-              value={INR.format(Math.abs(netOwed))}
-              subtitle={netOwed >= 0 ? 'You are owed' : 'You owe others'}
-              icon={<Wallet size={18} />}
-              iconBg={netOwed >= 0 ? 'bg-primary-50' : 'bg-amber-50'}
-              iconColor={netOwed >= 0 ? 'text-primary-600' : 'text-amber-600'}
-              loading={ledgerLoading}
-            />
-          </div>
+          {(() => {
+            const cards = [
+              { title: 'Total Lent Out', value: ledgerSummary.totalLent, icon: <ArrowUpRight size={18} />, iconBg: 'bg-red-50', iconColor: 'text-red-500' },
+              { title: 'Total Borrowed', value: ledgerSummary.totalBorrowed, icon: <ArrowDownLeft size={18} />, iconBg: 'bg-emerald-50', iconColor: 'text-emerald-500' },
+              { title: 'Net Owed to You', value: Math.abs(netOwed), icon: <Wallet size={18} />, iconBg: netOwed >= 0 ? 'bg-primary-50' : 'bg-amber-50', iconColor: netOwed >= 0 ? 'text-primary-600' : 'text-amber-600', subtitle: netOwed >= 0 ? 'You are owed' : 'You owe others' },
+            ];
+            const nonZero = cards.filter(c => c.value > 0);
+            const hasHidden = nonZero.length < cards.length && nonZero.length > 0;
+            const visible = showAllLedgerCards || !hasHidden ? cards : nonZero;
+            return (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                  {visible.map(c => (
+                    <MetricCard key={c.title} title={c.title} value={INR.format(c.value)} subtitle={c.subtitle} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} loading={ledgerLoading} />
+                  ))}
+                </div>
+                {hasHidden && (
+                  <button onClick={() => setShowAllLedgerCards(v => !v)} className="text-xs text-primary-600 hover:text-primary-700 font-medium mt-2">
+                    {showAllLedgerCards ? 'Show less' : `Show all (${cards.length - nonZero.length} hidden)`}
+                  </button>
+                )}
+              </>
+            );
+          })()}
 
           <FilterPills
             options={[
@@ -1136,30 +1132,31 @@ export default function FALedger() {
       {/* ── Allocations tab ─────────────────────────────────────────────────── */}
       {activeTab === 'allocations' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-            <MetricCard
-              title="Total Allocated"
-              value={INR.format(allocSummary.totalAllocated)}
-              icon={<Wallet size={18} />}
-              iconBg="bg-primary-50"
-              iconColor="text-primary-600"
-              loading={allocLoading}
-            />
-            {Object.entries(ALLOC_CATEGORIES).map(([key, cat]) => {
-              const { Icon } = cat;
-              return (
-                <MetricCard
-                  key={key}
-                  title={cat.label}
-                  value={INR.format(allocSummary.byCategory[key] ?? 0)}
-                  icon={<Icon size={18} />}
-                  iconBg={cat.bg}
-                  iconColor={cat.text}
-                  loading={allocLoading}
-                />
-              );
-            })}
-          </div>
+          {(() => {
+            const cards = [
+              { key: '_total', title: 'Total Allocated', value: allocSummary.totalAllocated, icon: <Wallet size={18} />, iconBg: 'bg-primary-50', iconColor: 'text-primary-600' },
+              ...Object.entries(ALLOC_CATEGORIES).map(([k, cat]) => ({
+                key: k, title: cat.label, value: allocSummary.byCategory[k] ?? 0, icon: <cat.Icon size={18} />, iconBg: cat.bg, iconColor: cat.text,
+              })),
+            ];
+            const nonZero = cards.filter(c => c.value > 0);
+            const hasHidden = nonZero.length < cards.length && nonZero.length > 0;
+            const visible = showAllAllocCards || !hasHidden ? cards : nonZero;
+            return (
+              <>
+                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+                  {visible.map(c => (
+                    <MetricCard key={c.key} title={c.title} value={INR.format(c.value)} icon={c.icon} iconBg={c.iconBg} iconColor={c.iconColor} loading={allocLoading} />
+                  ))}
+                </div>
+                {hasHidden && (
+                  <button onClick={() => setShowAllAllocCards(v => !v)} className="text-xs text-primary-600 hover:text-primary-700 font-medium mt-2">
+                    {showAllAllocCards ? 'Show less' : `Show all (${cards.length - nonZero.length} hidden)`}
+                  </button>
+                )}
+              </>
+            );
+          })()}
 
           <FilterPills
             options={[

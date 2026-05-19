@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   HandCoins, ArrowUpRight, ArrowDownLeft, Wallet,
   Plane, PiggyBank, TrendingUp, CircleDot,
@@ -66,14 +66,20 @@ function ModalShell({ title, onClose, children }) {
 
 function LedgerCard({ entry, onEdit, onPayment, onAddMore, onSettle, onWriteOff, onDelete }) {
   const isLent      = entry.direction === 'LENT';
-  const settled     = entry.settledAmount ?? 0;
-  const pct         = entry.amount > 0 ? Math.min(100, Math.round((settled / entry.amount) * 100)) : 0;
+  const settled     = Number(entry.settledAmount ?? 0);
+  const amount      = Number(entry.amount);
+  const pct         = amount > 0 ? Math.min(100, Math.round((settled / amount) * 100)) : 0;
   const statusLower = (entry.status ?? '').toLowerCase();
   const canAct      = statusLower !== 'settled' && statusLower !== 'written_off';
 
   const [showHistory, setShowHistory] = useState(false);
   const [history,     setHistory]     = useState(null);
   const [histLoading, setHistLoading] = useState(false);
+
+  // Invalidate history cache when entry data mutates
+  useEffect(() => {
+    setHistory(null);
+  }, [entry.amount, entry.settledAmount, entry.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleHistory = async () => {
     if (!showHistory && history === null) {
@@ -113,7 +119,7 @@ function LedgerCard({ entry, onEdit, onPayment, onAddMore, onSettle, onWriteOff,
             <p className={clsx('text-lg font-bold',
               isLent && statusLower !== 'settled' ? 'text-red-600' : 'text-emerald-600',
             )}>
-              {INR.format(entry.amount)}
+              {INR.format(amount)}
             </p>
             <p className="text-xs text-slate-400">{isLent ? 'Lent' : 'Borrowed'}</p>
           </div>
@@ -132,7 +138,7 @@ function LedgerCard({ entry, onEdit, onPayment, onAddMore, onSettle, onWriteOff,
           <div className="space-y-1">
             <div className="flex justify-between text-xs text-slate-500">
               <span>{isLent ? 'Received' : 'Repaid'}: {INR.format(settled)}</span>
-              <span>{pct}% of {INR.format(entry.amount)}</span>
+              <span>{pct}% of {INR.format(amount)}</span>
             </div>
             <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
               <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${pct}%` }} />
@@ -159,13 +165,13 @@ function LedgerCard({ entry, onEdit, onPayment, onAddMore, onSettle, onWriteOff,
                 {isLent ? 'Received Back' : 'Paid Back'}
               </button>
               <button
-                onClick={() => onSettle(entry.id)}
+                onClick={() => onSettle(entry)}
                 className="text-xs font-medium px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
               >
                 Settle
               </button>
               <button
-                onClick={() => onWriteOff(entry.id)}
+                onClick={() => onWriteOff(entry)}
                 className="text-xs font-medium px-2.5 py-1 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors"
               >
                 Write Off
@@ -229,10 +235,12 @@ function LedgerCard({ entry, onEdit, onPayment, onAddMore, onSettle, onWriteOff,
 // ─── Allocation card ──────────────────────────────────────────────────────────
 
 function AllocationCard({ alloc, onEdit, onTopUp, onMarkUsed, onCancel, onDelete }) {
-  const cat     = ALLOC_CATEGORIES[alloc.category] ?? ALLOC_CATEGORIES.SAVINGS;
+  const cat      = ALLOC_CATEGORIES[alloc.category] ?? ALLOC_CATEGORIES.SAVINGS;
   const { Icon } = cat;
-  const pct     = alloc.targetAmount > 0 ? Math.min(100, Math.round((alloc.allocatedAmount / alloc.targetAmount) * 100)) : 0;
-  const isActive = (alloc.status ?? 'active').toLowerCase() === 'active';
+  const allocated = Number(alloc.allocatedAmount ?? 0);
+  const target    = Number(alloc.targetAmount);
+  const pct       = target > 0 ? Math.min(100, Math.round((allocated / target) * 100)) : 0;
+  const isActive  = (alloc.status ?? 'active').toLowerCase() === 'active';
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4 space-y-3 shadow-sm">
@@ -256,8 +264,8 @@ function AllocationCard({ alloc, onEdit, onTopUp, onMarkUsed, onCancel, onDelete
 
       <div className="space-y-1">
         <div className="flex justify-between text-xs text-slate-500">
-          <span>{INR.format(alloc.allocatedAmount ?? 0)} allocated</span>
-          <span>{pct}% of {INR.format(alloc.targetAmount)}</span>
+          <span>{INR.format(allocated)} allocated</span>
+          <span>{pct}% of {INR.format(target)}</span>
         </div>
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
           <div
@@ -309,6 +317,58 @@ function AllocationCard({ alloc, onEdit, onTopUp, onMarkUsed, onCancel, onDelete
 
 // ─── Modals ───────────────────────────────────────────────────────────────────
 
+// Generic confirm with optional note — onConfirm(note) is async; throws on error
+function ConfirmModal({ title, message, confirmLabel, danger = false, onClose, onConfirm }) {
+  const [loading, setLoading] = useState(false);
+  const [note,    setNote]    = useState('');
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await onConfirm(note || undefined);
+      onClose();
+    } catch {
+      // error toast handled by onConfirm
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <ModalShell title={title} onClose={onClose}>
+      {message && <p className="text-sm text-slate-600 mb-4">{message}</p>}
+      <form onSubmit={submit} className="space-y-4">
+        <div>
+          <label className="label">Note <span className="text-slate-400 font-normal">(optional)</span></label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. Settled via bank transfer"
+            className="input resize-none"
+            rows={2}
+          />
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+          <button
+            type="submit"
+            disabled={loading}
+            className={clsx('flex-1 inline-flex items-center justify-center gap-1.5 font-medium text-sm rounded-lg px-4 py-2 transition-colors',
+              danger
+                ? 'bg-red-600 text-white hover:bg-red-700 disabled:opacity-50'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50',
+            )}
+          >
+            {loading && <Loader2 size={14} className="animate-spin" />}
+            {loading ? 'Processing…' : confirmLabel}
+          </button>
+        </div>
+      </form>
+    </ModalShell>
+  );
+}
+
 function LedgerModal({ entry, onClose, onSuccess }) {
   const isEdit  = !!entry;
   const [loading, setLoading] = useState(false);
@@ -330,10 +390,11 @@ function LedgerModal({ entry, onClose, onSuccess }) {
     setLoading(true);
     try {
       const body = { ...form, amount: Number(form.amount), dueDate: form.dueDate || null };
-      if (isEdit) await financialApi.updateLedgerEntry(entry.id, body);
-      else        await financialApi.createLedgerEntry(body);
+      const result = isEdit
+        ? await financialApi.updateLedgerEntry(entry.id, body)
+        : await financialApi.createLedgerEntry(body);
       toast.success(isEdit ? 'Entry updated' : 'Entry added');
-      onSuccess();
+      onSuccess(result, isEdit, body);
     } catch {
       toast.error('Failed to save entry');
     } finally {
@@ -406,11 +467,12 @@ function LedgerModal({ entry, onClose, onSuccess }) {
         </div>
         <div>
           <label className="label">Notes <span className="text-slate-400 font-normal">(optional)</span></label>
-          <input
+          <textarea
             value={form.notes}
             onChange={(e) => set('notes', e.target.value)}
             placeholder="Any additional context"
-            className="input"
+            className="input resize-none"
+            rows={2}
           />
         </div>
         <div className="flex gap-2 pt-1">
@@ -430,16 +492,17 @@ function PaymentModal({ entry, onClose, onSuccess }) {
   const [amount, setAmount]   = useState('');
   const [note,   setNote]     = useState('');
   const isLent    = entry.direction === 'LENT';
-  const remaining = entry.amount - (entry.settledAmount ?? 0);
+  const remaining = Number(entry.amount) - Number(entry.settledAmount ?? 0);
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!amount || Number(amount) <= 0) return toast.error('Enter a valid amount');
+    const numAmount = Number(amount);
+    if (!amount || numAmount <= 0) return toast.error('Enter a valid amount');
     setLoading(true);
     try {
-      await financialApi.recordLedgerPayment(entry.id, { amount: Number(amount), note });
+      await financialApi.recordLedgerPayment(entry.id, { amount: numAmount, note: note || undefined });
       toast.success('Payment recorded');
-      onSuccess();
+      onSuccess(entry.id, numAmount);
     } catch {
       toast.error('Failed to record payment');
     } finally {
@@ -451,10 +514,10 @@ function PaymentModal({ entry, onClose, onSuccess }) {
     <ModalShell title={`Record ${isLent ? 'Receipt' : 'Repayment'}`} onClose={onClose}>
       <div className="mb-4 p-3 bg-slate-50 rounded-lg text-sm space-y-0.5">
         <p className="font-bold text-slate-900">{entry.contactName}</p>
-        <p className="text-slate-500">Total: {INR.format(entry.amount)}</p>
-        {(entry.settledAmount ?? 0) > 0 && (
+        <p className="text-slate-500">Total: {INR.format(Number(entry.amount))}</p>
+        {Number(entry.settledAmount ?? 0) > 0 && (
           <p className="text-xs text-slate-400">
-            Already {isLent ? 'received' : 'repaid'}: {INR.format(entry.settledAmount)}
+            Already {isLent ? 'received' : 'repaid'}: {INR.format(Number(entry.settledAmount))}
           </p>
         )}
         <p className="text-xs font-medium text-primary-600">Remaining: {INR.format(remaining)}</p>
@@ -468,16 +531,18 @@ function PaymentModal({ entry, onClose, onSuccess }) {
             type="number" min="1" max={remaining} step="1"
             placeholder={`Max ${INR.format(remaining)}`}
             className="input"
+            autoFocus
             required
           />
         </div>
         <div>
           <label className="label">Note <span className="text-slate-400 font-normal">(optional)</span></label>
-          <input
+          <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
-            placeholder="e.g. UPI transfer"
-            className="input"
+            placeholder="e.g. UPI transfer, Cash"
+            className="input resize-none"
+            rows={2}
           />
         </div>
         <div className="flex gap-2 pt-1">
@@ -495,16 +560,20 @@ function PaymentModal({ entry, onClose, onSuccess }) {
 function AddMoreModal({ entry, onClose, onSuccess }) {
   const [loading, setLoading] = useState(false);
   const [extra, setExtra]     = useState('');
-  const isLent = entry.direction === 'LENT';
+  const [note,  setNote]      = useState('');
+  const isLent    = entry.direction === 'LENT';
+  const curAmount = Number(entry.amount); // explicit cast — backend may return string
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!extra || Number(extra) <= 0) return toast.error('Enter a valid amount');
+    const numExtra = Number(extra);
+    if (!extra || numExtra <= 0) return toast.error('Enter a valid amount');
+    const newAmount = curAmount + numExtra;
     setLoading(true);
     try {
-      await financialApi.updateLedgerEntry(entry.id, { amount: entry.amount + Number(extra) });
+      await financialApi.updateLedgerEntry(entry.id, { amount: newAmount, note: note || undefined });
       toast.success(`${isLent ? 'Lent' : 'Borrowed'} amount updated`);
-      onSuccess();
+      onSuccess(entry.id, newAmount);
     } catch {
       toast.error('Failed to update amount');
     } finally {
@@ -516,7 +585,7 @@ function AddMoreModal({ entry, onClose, onSuccess }) {
     <ModalShell title={isLent ? 'Lend More' : 'Borrow More'} onClose={onClose}>
       <div className="mb-4 p-3 bg-slate-50 rounded-lg text-sm space-y-0.5">
         <p className="font-bold text-slate-900">{entry.contactName}</p>
-        <p className="text-slate-500">Current amount: {INR.format(entry.amount)}</p>
+        <p className="text-slate-500">Current amount: {INR.format(curAmount)}</p>
       </div>
       <form onSubmit={submit} className="space-y-4">
         <div>
@@ -532,9 +601,19 @@ function AddMoreModal({ entry, onClose, onSuccess }) {
           />
           {extra && Number(extra) > 0 && (
             <p className="mt-1 text-xs text-slate-500">
-              New total: {INR.format(entry.amount + Number(extra))}
+              New total: {INR.format(curAmount + Number(extra))}
             </p>
           )}
+        </div>
+        <div>
+          <label className="label">Note <span className="text-slate-400 font-normal">(optional)</span></label>
+          <textarea
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder="e.g. Additional loan for medical expenses"
+            className="input resize-none"
+            rows={2}
+          />
         </div>
         <div className="flex gap-2 pt-1">
           <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
@@ -574,10 +653,11 @@ function AllocationModal({ alloc, onClose, onSuccess }) {
         targetAmount:  Number(form.targetAmount),
         initialAmount: Number(form.initialAmount) || 0,
       };
-      if (isEdit) await financialApi.updateAllocation(alloc.id, body);
-      else        await financialApi.createAllocation(body);
+      const result = isEdit
+        ? await financialApi.updateAllocation(alloc.id, body)
+        : await financialApi.createAllocation(body);
       toast.success(isEdit ? 'Allocation updated' : 'Allocation created');
-      onSuccess();
+      onSuccess(result, isEdit, body);
     } catch {
       toast.error('Failed to save allocation');
     } finally {
@@ -655,11 +735,12 @@ function AllocationModal({ alloc, onClose, onSuccess }) {
         </div>
         <div>
           <label className="label">Notes <span className="text-slate-400 font-normal">(optional)</span></label>
-          <input
+          <textarea
             value={form.notes}
             onChange={(e) => set('notes', e.target.value)}
             placeholder="Any notes"
-            className="input"
+            className="input resize-none"
+            rows={2}
           />
         </div>
         <div className="flex gap-2 pt-1">
@@ -681,12 +762,13 @@ function TopUpModal({ alloc, onClose, onSuccess }) {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (!amount || Number(amount) <= 0) return toast.error('Enter a valid amount');
+    const numAmount = Number(amount);
+    if (!amount || numAmount <= 0) return toast.error('Enter a valid amount');
     setLoading(true);
     try {
-      await financialApi.topUpAllocation(alloc.id, { amount: Number(amount), note });
+      await financialApi.topUpAllocation(alloc.id, { amount: numAmount, note: note || undefined });
       toast.success('Topped up successfully');
-      onSuccess();
+      onSuccess(alloc.id, numAmount);
     } catch {
       toast.error('Failed to top up');
     } finally {
@@ -699,7 +781,7 @@ function TopUpModal({ alloc, onClose, onSuccess }) {
       <div className="mb-4 p-3 bg-slate-50 rounded-lg text-sm space-y-0.5">
         <p className="text-slate-500 text-xs">Current allocation</p>
         <p className="font-bold text-slate-900">
-          {INR.format(alloc.allocatedAmount ?? 0)} / {INR.format(alloc.targetAmount)}
+          {INR.format(Number(alloc.allocatedAmount ?? 0))} / {INR.format(Number(alloc.targetAmount))}
         </p>
       </div>
       <form onSubmit={submit} className="space-y-4">
@@ -711,16 +793,18 @@ function TopUpModal({ alloc, onClose, onSuccess }) {
             type="number" min="1" step="100"
             placeholder="5000"
             className="input"
+            autoFocus
             required
           />
         </div>
         <div>
           <label className="label">Note <span className="text-slate-400 font-normal">(optional)</span></label>
-          <input
+          <textarea
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="e.g. Monthly contribution"
-            className="input"
+            className="input resize-none"
+            rows={2}
           />
         </div>
         <div className="flex gap-2 pt-1">
@@ -763,34 +847,56 @@ function FilterPills({ options, active, onChange }) {
 export default function FALedger() {
   const [activeTab, setActiveTab] = useState('ledger');
 
-  // Ledger state
-  const [ledgerFilter,  setLedgerFilter]  = useState('all');
-  const [ledgerEntries, setLedgerEntries] = useState([]);
-  const [ledgerSummary, setLedgerSummary] = useState(null);
-  const [ledgerLoading, setLedgerLoading] = useState(true);
+  // ── Ledger state ────────────────────────────────────────────────────────────
+  const [ledgerFilter,    setLedgerFilter]    = useState('all');
+  const [ledgerEntries,   setLedgerEntries]   = useState([]);
+  const [ledgerLoading,   setLedgerLoading]   = useState(true);
   const [showLedgerModal, setShowLedgerModal] = useState(false);
-  const [editLedger,    setEditLedger]    = useState(null);
-  const [paymentEntry,  setPaymentEntry]  = useState(null);
-  const [addMoreEntry,  setAddMoreEntry]  = useState(null);
+  const [editLedger,      setEditLedger]      = useState(null);
+  const [paymentEntry,    setPaymentEntry]    = useState(null);
+  const [addMoreEntry,    setAddMoreEntry]    = useState(null);
+  const [confirmSettle,   setConfirmSettle]   = useState(null); // full entry
+  const [confirmWriteOff, setConfirmWriteOff] = useState(null); // full entry
 
-  // Allocations state
-  const [catFilter,    setCatFilter]    = useState('all');
-  const [allocations,  setAllocations]  = useState([]);
-  const [allocSummary, setAllocSummary] = useState(null);
-  const [allocLoading, setAllocLoading] = useState(true);
+  // ── Allocations state ───────────────────────────────────────────────────────
+  const [catFilter,      setCatFilter]      = useState('all');
+  const [allocations,    setAllocations]    = useState([]);
+  const [allocLoading,   setAllocLoading]   = useState(true);
   const [showAllocModal, setShowAllocModal] = useState(false);
-  const [editAlloc,    setEditAlloc]    = useState(null);
-  const [topUpAlloc,   setTopUpAlloc]   = useState(null);
+  const [editAlloc,      setEditAlloc]      = useState(null);
+  const [topUpAlloc,     setTopUpAlloc]     = useState(null);
 
+  // ── Computed summaries (no separate API calls) ──────────────────────────────
+  const ledgerSummary = useMemo(() => {
+    const active = ledgerEntries.filter(e => (e.status ?? '').toLowerCase() !== 'written_off');
+    return {
+      totalLent:     active.filter(e => e.direction === 'LENT').reduce((s, e) => s + Number(e.amount), 0),
+      totalBorrowed: active.filter(e => e.direction === 'BORROWED').reduce((s, e) => s + Number(e.amount), 0),
+    };
+  }, [ledgerEntries]);
+
+  const allocSummary = useMemo(() => ({
+    totalAllocated: allocations.reduce((s, a) => s + Number(a.allocatedAmount ?? 0), 0),
+    byCategory: Object.fromEntries(
+      Object.keys(ALLOC_CATEGORIES).map(k => [
+        k,
+        allocations.filter(a => a.category === k).reduce((s, a) => s + Number(a.allocatedAmount ?? 0), 0),
+      ])
+    ),
+  }), [allocations]);
+
+  // ── Optimistic state helpers ────────────────────────────────────────────────
+  const patchLedger  = (id, patch) => setLedgerEntries(p => p.map(e => e.id === id ? { ...e, ...patch } : e));
+  const removeLedger = (id)        => setLedgerEntries(p => p.filter(e => e.id !== id));
+  const patchAlloc   = (id, patch) => setAllocations(p => p.map(a => a.id === id ? { ...a, ...patch } : a));
+  const removeAlloc  = (id)        => setAllocations(p => p.filter(a => a.id !== id));
+
+  // ── Data fetchers (initial load only) ──────────────────────────────────────
   const fetchLedger = useCallback(async () => {
     setLedgerLoading(true);
     try {
-      const [entries, summary] = await Promise.all([
-        financialApi.getLedgerEntries(),
-        financialApi.getLedgerSummary(),
-      ]);
+      const entries = await financialApi.getLedgerEntries();
       setLedgerEntries(Array.isArray(entries) ? entries : (entries?.data ?? []));
-      setLedgerSummary(summary);
     } catch {
       toast.error('Failed to load ledger');
     } finally {
@@ -801,12 +907,8 @@ export default function FALedger() {
   const fetchAllocations = useCallback(async () => {
     setAllocLoading(true);
     try {
-      const [allocs, summary] = await Promise.all([
-        financialApi.getAllocations(),
-        financialApi.getAllocationsSummary(),
-      ]);
+      const allocs = await financialApi.getAllocations();
       setAllocations(Array.isArray(allocs) ? allocs : (allocs?.data ?? []));
-      setAllocSummary(summary);
     } catch {
       toast.error('Failed to load allocations');
     } finally {
@@ -817,57 +919,92 @@ export default function FALedger() {
   useEffect(() => { fetchLedger(); },      [fetchLedger]);
   useEffect(() => { fetchAllocations(); }, [fetchAllocations]);
 
-  // Ledger actions
-  const handleSettle = async (id) => {
-    try {
-      await financialApi.settleLedgerEntry(id);
-      toast.success('Entry settled');
-      fetchLedger();
-    } catch { toast.error('Failed to settle'); }
+  // ── Ledger modal callbacks ──────────────────────────────────────────────────
+  const handleLedgerSaved = (result, wasEdit, formBody) => {
+    if (wasEdit) {
+      // Use API response if it looks like a full entry; else patch from form data
+      patchLedger(editLedger.id, result?.id ? result : { ...formBody, id: editLedger.id });
+    } else {
+      const newEntry = result?.id
+        ? result
+        : { ...formBody, id: result?.id ?? `tmp_${Date.now()}`, settledAmount: 0, status: 'PENDING' };
+      setLedgerEntries(p => [newEntry, ...p]);
+    }
+    setShowLedgerModal(false);
+    setEditLedger(null);
   };
 
-  const handleWriteOff = async (id) => {
-    try {
-      await financialApi.writeOffLedgerEntry(id);
-      toast.success('Entry written off');
-      fetchLedger();
-    } catch { toast.error('Failed to write off'); }
+  const handlePaymentDone = (id, paidAmount) => {
+    setLedgerEntries(p => p.map(e => {
+      if (e.id !== id) return e;
+      const newSettled = Number(e.settledAmount ?? 0) + paidAmount;
+      const newStatus  = newSettled >= Number(e.amount) ? 'SETTLED' : 'PARTIAL';
+      return { ...e, settledAmount: newSettled, status: newStatus };
+    }));
+    setPaymentEntry(null);
+  };
+
+  const handleAddMoreDone = (id, newAmount) => {
+    patchLedger(id, { amount: newAmount });
+    setAddMoreEntry(null);
   };
 
   const handleDeleteLedger = async (id) => {
     try {
       await financialApi.deleteLedgerEntry(id);
+      removeLedger(id);
       toast.success('Entry deleted');
-      fetchLedger();
-    } catch { toast.error('Failed to delete entry'); }
+    } catch {
+      toast.error('Failed to delete entry');
+    }
   };
 
-  // Allocation actions
+  // ── Allocation modal callbacks ──────────────────────────────────────────────
+  const handleAllocSaved = (result, wasEdit, formBody) => {
+    if (wasEdit) {
+      patchAlloc(editAlloc.id, result?.id ? result : { ...formBody, id: editAlloc.id });
+    } else {
+      const newAlloc = result?.id
+        ? result
+        : { ...formBody, id: result?.id ?? `tmp_${Date.now()}`, allocatedAmount: formBody.initialAmount ?? 0, status: 'active' };
+      setAllocations(p => [newAlloc, ...p]);
+    }
+    setShowAllocModal(false);
+    setEditAlloc(null);
+  };
+
+  const handleTopUpDone = (id, topUpAmount) => {
+    patchAlloc(id, {
+      allocatedAmount: Number(allocations.find(a => a.id === id)?.allocatedAmount ?? 0) + topUpAmount,
+    });
+    setTopUpAlloc(null);
+  };
+
   const handleMarkUsed = async (id) => {
     try {
       await financialApi.markAllocationUsed(id);
+      patchAlloc(id, { status: 'USED' });
       toast.success('Marked as used');
-      fetchAllocations();
     } catch { toast.error('Failed to update status'); }
   };
 
   const handleCancelAlloc = async (id) => {
     try {
       await financialApi.cancelAllocation(id);
+      patchAlloc(id, { status: 'CANCELLED' });
       toast.success('Allocation cancelled');
-      fetchAllocations();
     } catch { toast.error('Failed to cancel'); }
   };
 
   const handleDeleteAlloc = async (id) => {
     try {
       await financialApi.deleteAllocation(id);
+      removeAlloc(id);
       toast.success('Allocation deleted');
-      fetchAllocations();
     } catch { toast.error('Failed to delete'); }
   };
 
-  // Filtered data
+  // ── Filtered views ──────────────────────────────────────────────────────────
   const filteredLedger = ledgerEntries.filter((e) => {
     if (ledgerFilter === 'lent')     return e.direction === 'LENT';
     if (ledgerFilter === 'borrowed') return e.direction === 'BORROWED';
@@ -879,7 +1016,7 @@ export default function FALedger() {
     catFilter === 'all' || a.category === catFilter,
   );
 
-  const netOwed = (ledgerSummary?.totalLent ?? 0) - (ledgerSummary?.totalBorrowed ?? 0);
+  const netOwed = ledgerSummary.totalLent - ledgerSummary.totalBorrowed;
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
@@ -931,7 +1068,7 @@ export default function FALedger() {
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
             <MetricCard
               title="Total Lent Out"
-              value={INR.format(ledgerSummary?.totalLent ?? 0)}
+              value={INR.format(ledgerSummary.totalLent)}
               icon={<ArrowUpRight size={18} />}
               iconBg="bg-red-50"
               iconColor="text-red-500"
@@ -939,7 +1076,7 @@ export default function FALedger() {
             />
             <MetricCard
               title="Total Borrowed"
-              value={INR.format(ledgerSummary?.totalBorrowed ?? 0)}
+              value={INR.format(ledgerSummary.totalBorrowed)}
               icon={<ArrowDownLeft size={18} />}
               iconBg="bg-emerald-50"
               iconColor="text-emerald-500"
@@ -986,8 +1123,8 @@ export default function FALedger() {
                   onEdit={(e) => { setEditLedger(e); setShowLedgerModal(true); }}
                   onPayment={setPaymentEntry}
                   onAddMore={setAddMoreEntry}
-                  onSettle={handleSettle}
-                  onWriteOff={handleWriteOff}
+                  onSettle={setConfirmSettle}
+                  onWriteOff={setConfirmWriteOff}
                   onDelete={handleDeleteLedger}
                 />
               ))}
@@ -1002,7 +1139,7 @@ export default function FALedger() {
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
             <MetricCard
               title="Total Allocated"
-              value={INR.format(allocSummary?.totalAllocated ?? 0)}
+              value={INR.format(allocSummary.totalAllocated)}
               icon={<Wallet size={18} />}
               iconBg="bg-primary-50"
               iconColor="text-primary-600"
@@ -1014,7 +1151,7 @@ export default function FALedger() {
                 <MetricCard
                   key={key}
                   title={cat.label}
-                  value={INR.format(allocSummary?.byCategory?.[key] ?? 0)}
+                  value={INR.format(allocSummary.byCategory[key] ?? 0)}
                   icon={<Icon size={18} />}
                   iconBg={cat.bg}
                   iconColor={cat.text}
@@ -1066,35 +1203,74 @@ export default function FALedger() {
         <LedgerModal
           entry={editLedger}
           onClose={() => { setShowLedgerModal(false); setEditLedger(null); }}
-          onSuccess={() => { setShowLedgerModal(false); setEditLedger(null); fetchLedger(); }}
+          onSuccess={handleLedgerSaved}
         />
       )}
       {paymentEntry && (
         <PaymentModal
           entry={paymentEntry}
           onClose={() => setPaymentEntry(null)}
-          onSuccess={() => { setPaymentEntry(null); fetchLedger(); }}
+          onSuccess={handlePaymentDone}
         />
       )}
       {addMoreEntry && (
         <AddMoreModal
           entry={addMoreEntry}
           onClose={() => setAddMoreEntry(null)}
-          onSuccess={() => { setAddMoreEntry(null); fetchLedger(); }}
+          onSuccess={handleAddMoreDone}
+        />
+      )}
+      {confirmSettle && (
+        <ConfirmModal
+          title="Settle Entry"
+          message={`Mark ${confirmSettle.contactName}'s entry as fully settled?`}
+          confirmLabel="Settle"
+          onClose={() => setConfirmSettle(null)}
+          onConfirm={async (note) => {
+            try {
+              await financialApi.settleLedgerEntry(confirmSettle.id, { note });
+              patchLedger(confirmSettle.id, { status: 'SETTLED' });
+              toast.success('Entry settled');
+              setConfirmSettle(null);
+            } catch {
+              toast.error('Failed to settle');
+              throw new Error();
+            }
+          }}
+        />
+      )}
+      {confirmWriteOff && (
+        <ConfirmModal
+          title="Write Off Entry"
+          message={`Write off ${confirmWriteOff.contactName}'s entry? This cannot be undone.`}
+          confirmLabel="Write Off"
+          danger
+          onClose={() => setConfirmWriteOff(null)}
+          onConfirm={async (note) => {
+            try {
+              await financialApi.writeOffLedgerEntry(confirmWriteOff.id, { note });
+              patchLedger(confirmWriteOff.id, { status: 'WRITTEN_OFF' });
+              toast.success('Entry written off');
+              setConfirmWriteOff(null);
+            } catch {
+              toast.error('Failed to write off');
+              throw new Error();
+            }
+          }}
         />
       )}
       {showAllocModal && (
         <AllocationModal
           alloc={editAlloc}
           onClose={() => { setShowAllocModal(false); setEditAlloc(null); }}
-          onSuccess={() => { setShowAllocModal(false); setEditAlloc(null); fetchAllocations(); }}
+          onSuccess={handleAllocSaved}
         />
       )}
       {topUpAlloc && (
         <TopUpModal
           alloc={topUpAlloc}
           onClose={() => setTopUpAlloc(null)}
-          onSuccess={() => { setTopUpAlloc(null); fetchAllocations(); }}
+          onSuccess={handleTopUpDone}
         />
       )}
     </div>

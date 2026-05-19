@@ -48,8 +48,8 @@ export const financialApi = {
   updateLedgerEntry:   (id, body)  => api.patch(FA.LEDGER_ENTRY(id), body).then((r) => r.data),
   deleteLedgerEntry:   (id)        => api.delete(FA.LEDGER_ENTRY(id)).then((r) => r.data),
   recordLedgerPayment: (id, body)  => api.post(FA.LEDGER_PAYMENT(id), body).then((r) => r.data),
-  settleLedgerEntry:   (id)        => api.post(FA.LEDGER_SETTLE(id)).then((r) => r.data),
-  writeOffLedgerEntry: (id)        => api.post(FA.LEDGER_WRITE_OFF(id)).then((r) => r.data),
+  settleLedgerEntry:   (id, body)   => api.post(FA.LEDGER_SETTLE(id), body).then((r) => r.data),
+  writeOffLedgerEntry: (id, body)   => api.post(FA.LEDGER_WRITE_OFF(id), body).then((r) => r.data),
   getLedgerSummary:    ()          => api.get(FA.LEDGER_SUMMARY).then((r) => r.data),
   getLedgerHistory:    (id)        => api.get(FA.LEDGER_HISTORY(id)).then((r) => r.data),
 

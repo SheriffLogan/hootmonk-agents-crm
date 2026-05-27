@@ -262,18 +262,24 @@ function AllocationCard({ alloc, onEdit, onTopUp, onMarkUsed, onCancel, onDelete
         <StatusBadge status={alloc.status ?? 'active'} map={ALLOC_STATUS} />
       </div>
 
-      <div className="space-y-1">
-        <div className="flex justify-between text-xs text-slate-500">
-          <span>{INR.format(allocated)} allocated</span>
-          <span>{pct}% of {INR.format(target)}</span>
+      {target > 0 ? (
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs text-slate-500">
+            <span>{INR.format(allocated)} allocated</span>
+            <span>{pct}% of {INR.format(target)}</span>
+          </div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className={clsx('h-full rounded-full transition-all', pct >= 100 ? 'bg-emerald-500' : 'bg-primary-500')}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
         </div>
-        <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-          <div
-            className={clsx('h-full rounded-full transition-all', pct >= 100 ? 'bg-emerald-500' : 'bg-primary-500')}
-            style={{ width: `${pct}%` }}
-          />
+      ) : (
+        <div className="text-sm font-semibold text-slate-800">
+          {INR.format(allocated)} <span className="text-xs font-normal text-slate-400">allocated</span>
         </div>
-      </div>
+      )}
 
       {alloc.deadline && (
         <p className="text-xs text-slate-500 flex items-center gap-1">
@@ -641,12 +647,11 @@ function AllocationModal({ alloc, onClose, onSuccess }) {
   const submit = async (e) => {
     e.preventDefault();
     if (!form.name.trim()) return toast.error('Name is required');
-    if (!form.targetAmount || Number(form.targetAmount) <= 0) return toast.error('Enter a valid target amount');
     setLoading(true);
     try {
       const body = {
         ...form,
-        targetAmount:  Number(form.targetAmount),
+        targetAmount:  form.targetAmount ? Number(form.targetAmount) : null,
         initialAmount: Number(form.initialAmount) || 0,
       };
       const result = isEdit
@@ -699,12 +704,12 @@ function AllocationModal({ alloc, onClose, onSuccess }) {
         )}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="label">Target Amount (₹)</label>
+            <label className="label">Target Amount (₹) <span className="text-slate-400 font-normal">— optional</span></label>
             <input
               value={form.targetAmount}
               onChange={(e) => set('targetAmount', e.target.value)}
-              type="number" min="1" step="100"
-              placeholder="50000"
+              type="number" min="0" step="100"
+              placeholder="Leave blank to track without a target"
               className="input"
               required
             />
@@ -776,7 +781,7 @@ function TopUpModal({ alloc, onClose, onSuccess }) {
       <div className="mb-4 p-3 bg-slate-50 rounded-lg text-sm space-y-0.5">
         <p className="text-slate-500 text-xs">Current allocation</p>
         <p className="font-bold text-slate-900">
-          {INR.format(Number(alloc.allocatedAmount ?? 0))} / {INR.format(Number(alloc.targetAmount))}
+          {INR.format(Number(alloc.allocatedAmount ?? 0))}{Number(alloc.targetAmount) > 0 ? ` / ${INR.format(Number(alloc.targetAmount))}` : ''}
         </p>
       </div>
       <form onSubmit={submit} className="space-y-4">

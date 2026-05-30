@@ -649,10 +649,11 @@ function AllocationModal({ alloc, onClose, onSuccess }) {
     if (!form.name.trim()) return toast.error('Name is required');
     setLoading(true);
     try {
+      const { initialAmount: initAmt, ...rest } = form;
       const body = {
-        ...form,
-        targetAmount:  form.targetAmount ? Number(form.targetAmount) : null,
-        initialAmount: Number(form.initialAmount) || 0,
+        ...rest,
+        targetAmount:   form.targetAmount ? Number(form.targetAmount) : null,
+        allocatedAmount: Number(initAmt) || 0,
       };
       const result = isEdit
         ? await financialApi.updateAllocation(alloc.id, body)
@@ -711,7 +712,6 @@ function AllocationModal({ alloc, onClose, onSuccess }) {
               type="number" min="0" step="100"
               placeholder="Leave blank to track without a target"
               className="input"
-              required
             />
           </div>
           <div>
